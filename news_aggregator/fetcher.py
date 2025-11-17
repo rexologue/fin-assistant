@@ -5,7 +5,7 @@ from pathlib import Path
 
 import requests
 
-from config import SourceConfig, RawFeed
+from .config import SourceConfig, RawFeed
 
 DEFAULT_HEADERS = {
     "User-Agent": "MyNewsBot/1.0 (+contact@example.com)"

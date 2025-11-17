@@ -1,0 +1,93 @@
+[
+  {
+    "name": "Коммерсант",
+    "id": "kommersant_finance",
+    "urls": [
+      "https://www.kommersant.ru/RSS/money.xml",
+      "https://www.kommersant.ru/RSS/section-economics.xml",
+      "https://www.kommersant.ru/RSS/section-business.xml"
+    ]
+  },
+  {
+    "name": "Ведомости",
+    "id": "vedomosti",
+    "urls": [
+      "https://www.vedomosti.ru/rss/rubric/business.xml",
+      "https://www.vedomosti.ru/rss/rubric/economics.xml",
+      "https://www.vedomosti.ru/rss/rubric/finance.xml"
+    ]
+  },
+  {
+    "name": "Центробанк РФ",
+    "id": "cbr",
+    "urls": [
+      "http://www.cbr.ru/rss/RssPress",
+      "http://www.cbr.ru/rss/eventrss"
+    ]
+  },
+  {
+    "name": "ФРС США",
+    "id": "fed",
+    "urls": [
+      "https://www.federalreserve.gov/feeds/press_all.xml",
+      "https://www.federalreserve.gov/feeds/press_monetary.xml"
+    ]
+  },
+  {
+    "name": "Bank Of England",
+    "id": "boe",
+    "urls": [
+      "https://www.bankofengland.co.uk/rss/news"
+    ]
+  },
+  {
+    "name": "Investing.com",
+    "id": "investing_com",
+    "urls": [
+      "https://ru.investing.com/rss/stock.rss",
+      "https://ru.investing.com/rss/market_overview.rss",
+      "https://ru.investing.com/rss/302.rss",
+      "https://ru.investing.com/rss/commodities.rss",
+      "https://ru.investing.com/rss/bonds.rss",
+      "https://ru.investing.com/rss/central_banks.rss",
+      "https://ru.investing.com/rss/news.rss"
+    ]
+  },
+  {
+    "name": "Финам",
+    "id": "finam",
+    "urls": [
+      "https://www.finam.ru/analysis/conews/rsspoint/",
+      "https://www.finam.ru/analysis/nslent/rsspoint/",
+      "https://www.finam.ru/analysis/forecasts/rsspoint/",
+      "https://www.finam.ru/international/advanced/rsspoint/",
+      "http://bonds.finam.ru/news/today/rss.asp"
+    ]
+  },
+  {
+    "name": "Financial Times",
+    "id": "ft",
+    "urls": [
+      "https://www.ft.com/rss/home/international"
+    ]
+  },
+  {
+    "name": "Bloomberg",
+    "id": "bloomberg",
+    "urls": [
+      "https://feeds.bloomberg.com/markets/news.rss",
+      "https://feeds.bloomberg.com/politics/news.rss",
+      "https://feeds.bloomberg.com/technology/news.rss",
+      "https://feeds.bloomberg.com/economics/news.rss",
+      "https://feeds.bloomberg.com/industries/news.rss",
+      "https://feeds.bloomberg.com/bview/news.rss"
+    ]
+  },
+  {
+    "name": "РБК",
+    "id": "rbc",
+    "urls": [
+      "https://rssexport.rbc.ru/rbcnews/news/30/full.rss"
+    ]
+  }
+]

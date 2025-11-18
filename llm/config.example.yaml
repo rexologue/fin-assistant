@@ -1,0 +1,6 @@
+model_name: ~/path/or/model/name
+host: 0.0.0.0
+port: 17000
+device_id: 0
+gpu_memory_utilization: 0.8
+max_model_len: 16384

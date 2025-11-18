@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  news-aggregator:
+    build:
+      context: .
+      dockerfile: news_aggregator/Dockerfile
+    container_name: news-aggregator
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./news_aggregator/config.yaml:/app/news_aggregator/config.yaml:ro
+      - ./news_aggregator/sources.json:/app/news_aggregator/sources.json:ro
+
+  llm-service:
+    build:
+      context: .
+      dockerfile: llm/Dockerfile
+    container_name: llm-service
+    depends_on:
+      - news-aggregator
+    environment:
+      - LLM_CONFIG_PATH=/app/llm/config.yaml
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./llm/config.yaml:/app/llm/config.yaml:ro
+      - /models:/models

@@ -24,9 +24,17 @@ class Parser:
 
         news: Dict[str, List[NewsItem]] = {}
 
-        for feed in raw_feeds:
+        total_feeds = len(raw_feeds)
+
+        for index, feed in enumerate(raw_feeds, start=1):
             news[feed.name] = []
-            logger.debug("Parsing feed '%s' (%s)", feed.name, feed.source)
+            logger.info(
+                "Parsing feed %d/%d: '%s' (%s)",
+                index,
+                total_feeds,
+                feed.name,
+                feed.source,
+            )
 
             if feed.source == "finam":
                 finam_news = parse_rss_http_string(feed.xml, feed.source)
@@ -34,11 +42,11 @@ class Parser:
                 for item in finam_news:
                     item.content = item.content.split("...")[0]
                     news[feed.name].append(item)
-                logger.debug("Processed %d 'finam' items for %s", len(finam_news), feed.name)
+                logger.info("Processed %d 'finam' items for %s", len(finam_news), feed.name)
             else:
                 parsed_items = parse_rss_http_string(feed.xml, feed.source)
                 news[feed.name].extend(parsed_items)
-                logger.debug(
+                logger.info(
                     "Processed %d items for feed '%s'", len(parsed_items), feed.name
                 )
 

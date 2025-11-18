@@ -89,5 +89,15 @@
     "urls": [
       "https://rssexport.rbc.ru/rbcnews/news/30/full.rss"
     ]
+  },
+  {
+    "name": "The Wall Street Journal",
+    "id": "wsj",
+    "urls": [
+      "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",
+      "https://feeds.content.dowjones.io/public/rss/socialeconomyfeed",
+      "https://feeds.content.dowjones.io/public/rss/RSSWSJD",
+      "https://feeds.content.dowjones.io/public/rss/socialpoliticsfeed"
+    ]
   }
 ]

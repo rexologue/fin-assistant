@@ -36,13 +36,3 @@ class Parser:
         return news
 
 
-if __name__ == "__main__":
-    parser = Parser(Path(__file__).with_name("sources.json"))
-    parsed_news = parser.parse()
-
-    for name, news_list in parsed_news.items():
-        try:
-            print(news_list[0])
-        except Exception as exc:  # pragma: no cover - debug helper
-            print(f"Skip {name} due to {exc}")
-        print("\n" + "+" * 10 + "\n")

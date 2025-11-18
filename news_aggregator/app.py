@@ -1,92 +1,17 @@
 from __future__ import annotations
 
-import os
 import threading
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 from typing import Dict, Iterable, List, Optional
 
-import pandas as pd
-import yaml
+import pandas as pd # type: ignore
 from fastapi import FastAPI
 
-from .config import NewsItem
-from .logging_config import setup_logging
 from .parser import Parser
-
-CONFIG_ENV_VAR = "NEWS_AGGREGATOR_CONFIG"
-DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
-DEFAULT_CACHE_DIR = Path.home() / "news_cache"
-DEFAULT_PASSIVE_MODE_SECONDS = 300
-
-
-@dataclass
-class AppConfig:
-    cache_dir: Path = DEFAULT_CACHE_DIR
-    period: str = "1d"
-    passive_mode_dur: int = DEFAULT_PASSIVE_MODE_SECONDS
-    sources_path: Path = Path(__file__).with_name("sources.json")
-
-    @property
-    def period_delta(self) -> timedelta:
-        return parse_period(self.period)
-
-
-def parse_period(period: str) -> timedelta:
-    if not period:
-        raise ValueError("Period string cannot be empty")
-
-    unit = period[-1]
-    try:
-        value = int(period[:-1])
-    except ValueError as exc:
-        raise ValueError(f"Unable to parse period value from '{period}'") from exc
-
-    if unit == "h":
-        return timedelta(hours=value)
-    if unit == "d":
-        return timedelta(days=value)
-    if unit == "w":
-        return timedelta(weeks=value)
-    if unit == "m":
-        return timedelta(days=30 * value)
-
-    raise ValueError(f"Unsupported period unit '{unit}' in '{period}'")
-
-
-def _expand_path(path_value: Optional[str]) -> Optional[Path]:
-    if path_value is None:
-        return None
-    return Path(os.path.expanduser(path_value)).resolve()
-
-
-def load_app_config(config_path: Path | None = None) -> AppConfig:
-    config_file = config_path
-    if config_file is None:
-        env_path = os.environ.get(CONFIG_ENV_VAR)
-        if env_path:
-            config_file = Path(env_path)
-        elif DEFAULT_CONFIG_PATH.exists():
-            config_file = DEFAULT_CONFIG_PATH
-
-    cfg_dict: Dict[str, object] = {}
-    if config_file and config_file.exists():
-        cfg_dict = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
-
-    cache_dir = _expand_path(str(cfg_dict.get("cache_dir"))) if cfg_dict.get("cache_dir") else DEFAULT_CACHE_DIR
-    period = str(cfg_dict.get("period", "1d"))
-    passive = int(cfg_dict.get("passive_mode_dur", DEFAULT_PASSIVE_MODE_SECONDS))
-
-    sources_path_cfg = cfg_dict.get("sources_path")
-    sources_path = _expand_path(str(sources_path_cfg)) if sources_path_cfg else Path(__file__).with_name("sources.json")
-
-    return AppConfig(
-        cache_dir=cache_dir,
-        period=period,
-        passive_mode_dur=passive,
-        sources_path=sources_path,
-    )
+from .logging_config import setup_logging
+from .config import NewsItem, AppConfig, load_app_config
 
 
 class NewsCache:
@@ -113,6 +38,7 @@ class NewsCache:
         with self._lock:
             if not self.cache_file.exists():
                 return self._empty_df()
+             
             return pd.read_parquet(self.cache_file)
 
     def _write_df(self, df: pd.DataFrame) -> None:
@@ -127,6 +53,7 @@ class NewsCache:
         df["published_at_dt"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
         filtered = df[df["published_at_dt"].isna() | (df["published_at_dt"] >= cutoff)]
         filtered = filtered.drop(columns=["published_at_dt"], errors="ignore")
+
         if len(filtered) != len(df):
             self._write_df(filtered)
 
@@ -153,18 +80,23 @@ class NewsCache:
 
     def get_records(self) -> List[Dict[str, object]]:
         df = self._read_df()
+
         if df.empty:
             return []
-        return df.to_dict(orient="records")
+        
+        return df.to_dict(orient="records")  # type: ignore
 
     def get_titles(self) -> List[str]:
-        return [row["title"] for row in self.get_records()]
+        return [row["title"] for row in self.get_records()] # type: ignore
 
     def existing_identities(self) -> set[str]:
         df = self._read_df()
+
         if df.empty:
             return set()
+        
         identities: set[str] = set()
+
         for _, row in df.iterrows():
             identities.add(
                 build_identity(
@@ -174,6 +106,7 @@ class NewsCache:
                     guid=_coerce_optional_str(row.get("guid")),
                 )
             )
+
         return identities
 
 
@@ -210,6 +143,7 @@ class AggregationService:
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
+        
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._worker, name="news-worker", daemon=True)
         self._thread.start()
@@ -223,6 +157,7 @@ class AggregationService:
         while not self._stop_event.is_set():
             try:
                 self._run_active_cycle()
+
             except Exception:  # pragma: no cover - background thread safety
                 import logging
 
@@ -238,13 +173,16 @@ class AggregationService:
         parsed_news = self.parser.parse()
         new_items = self._flatten_news(parsed_news)
         filtered_items = self._filter_duplicates(new_items, cutoff)
+
         if filtered_items:
             self.cache.append_items(filtered_items)
 
     def _flatten_news(self, parsed: Dict[str, List[NewsItem]]) -> List[NewsItem]:
         items: List[NewsItem] = []
+
         for source_items in parsed.values():
             items.extend(source_items)
+
         return items
 
     def _filter_duplicates(
@@ -256,13 +194,17 @@ class AggregationService:
         for item in items:
             if item.published_at is not None and item.published_at.tzinfo is None:
                 item.published_at = item.published_at.replace(tzinfo=timezone.utc)
+
             if item.published_at and item.published_at < cutoff:
                 continue
+
             identity = build_identity(item.source, item.title, item.url, item.guid)
             if identity in existing or identity in seen:
                 continue
+
             seen.add(identity)
             filtered.append(item)
+
         return filtered
 
     def get_titles(self) -> List[str]:
@@ -270,10 +212,13 @@ class AggregationService:
 
     def get_news(self) -> List[Dict[str, object]]:
         records = self.cache.get_records()
+
         for record in records:
             published = record.get("published_at")
+
             if isinstance(published, datetime):
                 record["published_at"] = normalize_datetime(published)
+
         return records
 
 
@@ -281,16 +226,26 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     config = load_app_config(config_path)
     setup_logging()
 
-    app = FastAPI(title="News Aggregator", version="1.0.0")
     service = AggregationService(config)
 
-    @app.on_event("startup")
-    async def startup_event() -> None:  # pragma: no cover - FastAPI hook
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # startup
         service.start()
+        try:
+            yield
+        finally:
+            # shutdown
+            service.stop()
 
-    @app.on_event("shutdown")
-    async def shutdown_event() -> None:  # pragma: no cover - FastAPI hook
-        service.stop()
+    app = FastAPI(
+        title="News Aggregator",
+        version="1.0.0",
+        lifespan=lifespan,
+    )
+
+    app.state.config = config
+    app.state.service = service
 
     @app.get("/titles")
     async def get_titles() -> List[str]:
@@ -300,8 +255,6 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     async def get_news() -> List[Dict[str, object]]:
         return service.get_news()
 
-    app.state.config = config
-    app.state.service = service
     return app
 
 
@@ -310,5 +263,4 @@ app = create_app()
 
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
-
     uvicorn.run("news_aggregator.app:app", host="0.0.0.0", port=8000, reload=False)

@@ -1,13 +1,15 @@
+docker: true
 model:
   path: /model
   host: 0.0.0.0
   port: 8001
   device_id: 0
+  quantization:
   gpu_memory_utilization: 0.8
   max_model_len: 16384
   autostart: true
 sampling:
   sample_size: 20
 aggregator:
-  base_url: http://localhost:8000
+  base_url: http://news-aggregator:8000
   timeout_seconds: 15

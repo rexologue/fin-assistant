@@ -45,6 +45,8 @@ class NewsItem:
 
 @dataclass
 class AppConfig:
+    host: str = "0.0.0.0"
+    port: int = 8000
     cache_dir: Path = DEFAULT_CACHE_DIR
     period: str = "1d"
     passive_mode_dur: int = DEFAULT_PASSIVE_MODE_SECONDS
@@ -79,23 +81,25 @@ def parse_period(period: str) -> timedelta:
 
 
 def load_app_config(config_path: Path | None = None) -> AppConfig:
-    config_file = config_path
+    path = config_path
 
-    if config_file is None:
+    if path is None:
         env_path = os.environ.get(CONFIG_ENV_VAR)
+        path = Path(env_path) if env_path else DEFAULT_CONFIG_PATH
 
-        if env_path:
-            config_file = Path(env_path)
-        elif DEFAULT_CONFIG_PATH.exists():
-            config_file = DEFAULT_CONFIG_PATH
-        else:
-            raise ValueError("Config path has been set wrong!")
+    if not path.exists():
+        raise FileNotFoundError(
+            f"News aggregator configuration file not found at {path}"
+        )
 
     cfg_dict: Dict[str, str | int] = {}
-    if config_file and config_file.exists():
-        logger.info("Loading application config from %s", config_file)
-        cfg_dict = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
-    
+    if path and path.exists():
+        logger.info("Loading application config from %s", path)
+        cfg_dict = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+    host = str(cfg_dict.get("host", "0.0.0.0"))
+    port = int(cfg_dict.get("port", 8000))
+
     cache_dir = os.environ.get(CACHE_DIR_ENV_VAR, cfg_dict.get("cache_dir", DEFAULT_CACHE_DIR))
 
     if isinstance(cache_dir, str):
@@ -125,7 +129,9 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
         raise ValueError("Bad cache dir configuration!")
 
     logger.info(
-        "Loaded AppConfig(cache_dir=%s, period=%s, passive_mode_dur=%s, sources_path=%s)",
+        "Loaded AppConfig(host=%s, port=%s, cache_dir=%s, period=%s, passive_mode_dur=%s, sources_path=%s)",
+        host,
+        port,
         cache_dir,
         period,
         passive,
@@ -133,6 +139,8 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
     )
 
     return AppConfig(
+        host=host,
+        port=port,
         cache_dir=cache_dir,
         period=period,
         passive_mode_dur=passive,

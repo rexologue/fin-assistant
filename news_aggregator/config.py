@@ -7,6 +7,9 @@ from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 
 CONFIG_ENV_VAR = "NEWS_AGGREGATOR_CONFIG"
+PERIOD_ENV_VAR = "NEWS_AGGREGATOR_PERIOD"
+PASSIVE_MODE_ENV_VAR = "NEWS_AGGREGATOR_PASSIVE_MODE_DUR"
+CACHE_DIR_ENV_VAR = "NEWS_AGGREGATOR_CACHE_DIR"
 
 DEFAULT_PASSIVE_MODE_SECONDS = 300
 DEFAULT_CACHE_DIR = Path.home() / "news_cache"
@@ -93,7 +96,7 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
         logger.info("Loading application config from %s", config_file)
         cfg_dict = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
     
-    cache_dir = cfg_dict.get("cache_dir", DEFAULT_CACHE_DIR)
+    cache_dir = os.environ.get(CACHE_DIR_ENV_VAR, cfg_dict.get("cache_dir", DEFAULT_CACHE_DIR))
 
     if isinstance(cache_dir, str):
         cache_dir = Path(cache_dir).expanduser().resolve()
@@ -105,9 +108,10 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
     cache_dir.mkdir(exist_ok=True, parents=True)
     logger.debug("Ensured cache directory exists at %s", cache_dir)
 
-    period = str(cfg_dict.get("period", "1d"))
+    period = str(os.environ.get(PERIOD_ENV_VAR, cfg_dict.get("period", "1d")))
     logger.debug("Configured aggregation period: %s", period)
-    passive = int(cfg_dict.get("passive_mode_dur", DEFAULT_PASSIVE_MODE_SECONDS))
+    passive_env = os.environ.get(PASSIVE_MODE_ENV_VAR)
+    passive = int(passive_env) if passive_env is not None else int(cfg_dict.get("passive_mode_dur", DEFAULT_PASSIVE_MODE_SECONDS))
     logger.debug("Configured passive mode duration: %s", passive)
 
     sources_path = cfg_dict.get("sources_path", DEFAULT_SOURCES_PATH)

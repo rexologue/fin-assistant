@@ -1,5 +1,5 @@
 model:
-  path: /models/qwen2-1.5b-instruct
+  path: /model
   host: 0.0.0.0
   port: 8001
   device_id: 0
@@ -9,5 +9,5 @@ model:
 sampling:
   sample_size: 20
 aggregator:
-  base_url: http://news-aggregator:8000
+  base_url: http://localhost:8000
   timeout_seconds: 15

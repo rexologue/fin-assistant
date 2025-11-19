@@ -299,4 +299,9 @@ app = create_app()
 
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
-    uvicorn.run("news_aggregator.app:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run(
+        "news_aggregator.app:app",
+        host=app.state.config.host,
+        port=app.state.config.port,
+        reload=False,
+    )

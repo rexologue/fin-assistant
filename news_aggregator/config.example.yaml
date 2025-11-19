@@ -1,4 +1,6 @@
 # Default configuration for the news aggregator application
+host: 0.0.0.0
+port: 8000
 cache_dir: ~/news_cache
 period: 1d
 passive_mode_dur: 300

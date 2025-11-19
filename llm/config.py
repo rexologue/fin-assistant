@@ -16,6 +16,8 @@ SAMPLING_SIZE_ENV_VAR = "LLM_SAMPLING_SAMPLE_SIZE"
 AGGREGATOR_TIMEOUT_ENV_VAR = "LLM_AGGREGATOR_TIMEOUT_SECONDS"
 AGGREGATOR_HOST_ENV_VAR = "LLM_AGGREGATOR_HOST"
 AGGREGATOR_PORT_ENV_VAR = "LLM_AGGREGATOR_PORT"
+APP_HOST_ENV_VAR = "LLM_APP_HOST"
+APP_PORT_ENV_VAR = "LLM_APP_PORT"
 GPU_UTILIZATION_ENV_VAR = "LLM_GPU_UTILIZATION"
 MAX_MODEL_LENGTH_ENV_VAR = "LLM_MAX_MODEL_LENGTH"
 
@@ -44,11 +46,33 @@ class AggregatorConfig:
 
 
 @dataclass
+class AppRuntimeConfig:
+    host: str = "0.0.0.0"
+    port: int = 18300
+
+
+@dataclass
 class AppConfig:
     docker: bool
+    app: AppRuntimeConfig
     model: ModelConfig
     sampling: SamplingConfig
     aggregator: AggregatorConfig
+
+
+def _parse_app_runtime_config(raw: Dict[str, Any], docker_enabled: bool) -> AppRuntimeConfig:
+    host_value = str(raw.get("host", "0.0.0.0"))
+    port_value = int(raw.get("port", 18300))
+
+    if docker_enabled:
+        env_host = os.environ.get(APP_HOST_ENV_VAR)
+        env_port = os.environ.get(APP_PORT_ENV_VAR)
+        if env_host:
+            host_value = env_host
+        if env_port:
+            port_value = int(env_port)
+
+    return AppRuntimeConfig(host=host_value, port=port_value)
 
 
 def _parse_model_config(raw: Dict[str, Any], docker_enabled: bool) -> ModelConfig:
@@ -140,12 +164,14 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
     raw_config: Dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     docker_enabled = bool(raw_config.get("docker", False))
 
+    app_cfg = _parse_app_runtime_config(raw_config.get("app", {}), docker_enabled)
     model_cfg = _parse_model_config(raw_config.get("model", {}), docker_enabled)
     sampling_cfg = _parse_sampling_config(raw_config.get("sampling", {}), docker_enabled)
     aggregator_cfg = _parse_aggregator_config(raw_config.get("aggregator", {}), docker_enabled)
 
     return AppConfig(
         docker=docker_enabled,
+        app=app_cfg,
         model=model_cfg,
         sampling=sampling_cfg,
         aggregator=aggregator_cfg,
@@ -154,6 +180,7 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
 
 __all__ = [
     "AppConfig",
+    "AppRuntimeConfig",
     "ModelConfig",
     "SamplingConfig",
     "AggregatorConfig",

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Dict, List
-import logging
 
 from .fetcher import Fetcher
 from .parsers import parse_rss_http_string

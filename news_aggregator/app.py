@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Dict, Iterable, List, Optional
-import logging
 
 import pandas as pd # type: ignore
 from fastapi import FastAPI

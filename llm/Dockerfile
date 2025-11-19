@@ -1,20 +1,17 @@
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM pytorch/pytorch:2.2.1-cuda12.1-cudnn8-runtime AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        python3-venv \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git build-essential cmake ninja-build libgl1 libglib2.0-0 \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY llm/requirements.txt ./requirements.txt
+COPY ../install.sh ./install.sh
 RUN python3 -m pip install --upgrade pip \
-    && python3 -m pip install -r requirements.txt
+    && bash install.sh
 
 COPY llm /app/llm
 

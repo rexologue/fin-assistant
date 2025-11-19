@@ -26,10 +26,3 @@ services:
     volumes:
       - ./llm/config.yaml:/app/llm/config.yaml:ro
       - /models:/models
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: [6]
-              capabilities: [gpu]

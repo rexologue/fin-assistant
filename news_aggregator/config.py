@@ -1,10 +1,10 @@
 import os
 import yaml
+import logging
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
-import logging
 
 CONFIG_ENV_VAR = "NEWS_AGGREGATOR_CONFIG"
 

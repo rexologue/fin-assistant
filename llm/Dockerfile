@@ -28,6 +28,6 @@ COPY llm/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY llm /app/llm
-RUN test -f /app/llm/config.yaml
+RUN cp /app/llm/config.example.yaml /app/llm/config.yaml
 
-CMD ["python3", "-m", "uvicorn", "llm.app:app"]
+CMD ["python3", "-m", "uvicorn", "llm.app:app", "--host", "0.0.0.0", "--port", "18300"]

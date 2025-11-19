@@ -10,7 +10,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, conint
 
-from .config import AppConfig, load_app_config
+from .config import load_app_config
 from .vllm_server import VLLMServer, VLLMServerConfig
 
 logging.basicConfig(
@@ -221,8 +221,8 @@ def sample_news(items: Sequence[Dict[str, Any]], sample_size: int) -> List[Dict[
     return sampled
 
 
-def create_app(config: AppConfig | None = None) -> FastAPI:
-    config = config or load_app_config()
+def create_app() -> FastAPI:
+    config = load_app_config()
     aggregator_client = AggregatorClient(
         base_url=config.aggregator.base_url,
         timeout=config.aggregator.timeout_seconds,
@@ -324,5 +324,4 @@ app = create_app()
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 
-    runtime_config: AppConfig = app.state.config
-    uvicorn.run(app, host=runtime_config.model.host, port=runtime_config.model.port, reload=False)
+    uvicorn.run("llm.app:app", host="0.0.0.0", port=18300, reload=False)

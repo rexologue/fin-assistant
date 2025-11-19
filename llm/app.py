@@ -325,4 +325,4 @@ app = create_app()
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 
-    uvicorn.run("llm.app:app", host="0.0.0.0", port=8001, reload=False)
+    uvicorn.run("llm.app:app", host="0.0.0.0", port=18300, reload=False)

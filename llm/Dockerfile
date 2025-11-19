@@ -30,4 +30,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY llm /app/llm
 RUN test -f /app/llm/config.yaml
 
-CMD ["python3", "-m", "uvicorn", "llm.app:app"]
+CMD ["python3", "-m", "llm.app"]

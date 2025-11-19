@@ -89,10 +89,9 @@ class VLLMServer:
             command.extend(["--max-model-len", str(self.config.max_model_len)])
 
         env = os.environ.copy()
-        env.setdefault("VLLM_USE_V1", "0")
-        env.setdefault("MKL_SERVICE_FORCE_INTEL", "1")
-        env.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
-        env.setdefault("CUDA_VISIBLE_DEVICES", str(self.config.device_id))
+        # env.setdefault("VLLM_USE_V1", "0")
+        # env.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
+        # env.setdefault("CUDA_VISIBLE_DEVICES", str(self.config.device_id))
         
         self._process = subprocess.Popen(command, env=env)
 

@@ -4,7 +4,7 @@ app:
   port: 18300
 model:
   path: /model
-  host: 0.0.0.0
+  host: localhost
   port: 8001
   device_id: 0
   quantization:

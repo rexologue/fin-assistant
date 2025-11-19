@@ -11,4 +11,4 @@ RUN cp /app/news_aggregator/config.example.yaml /app/news_aggregator/config.yaml
 
 ENV NEWS_AGGREGATOR_CONFIG=/app/news_aggregator/config.yaml
 
-CMD ["uvicorn", "news_aggregator.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python3", "-m", "news_aggregator.app"]

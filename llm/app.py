@@ -4,7 +4,6 @@ import logging
 import random
 import re
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
 import httpx
@@ -222,8 +221,8 @@ def sample_news(items: Sequence[Dict[str, Any]], sample_size: int) -> List[Dict[
     return sampled
 
 
-def create_app(config_path: Path | None = None) -> FastAPI:
-    config = load_app_config(config_path)
+def create_app() -> FastAPI:
+    config = load_app_config()
     aggregator_client = AggregatorClient(
         base_url=config.aggregator.base_url,
         timeout=config.aggregator.timeout_seconds,

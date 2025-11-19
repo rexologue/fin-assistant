@@ -25,13 +25,14 @@ services:
       - news-aggregator
     network_mode: host
     environment:
-      LLM_CONFIG_PATH: /app/llm/config.yaml
       LLM_MODEL_PATH: /model
       LLM_MODEL_HOST: 0.0.0.0
       LLM_SAMPLING_SAMPLE_SIZE: ${LLM_SAMPLING_SAMPLE_SIZE:-20}
       LLM_AGGREGATOR_HOST: localhost
       LLM_AGGREGATOR_PORT: ${LLM_AGGREGATOR_PORT:-8000}
       LLM_AGGREGATOR_TIMEOUT_SECONDS: ${LLM_AGGREGATOR_TIMEOUT_SECONDS:-15}
+      LLM_GPU_UTILIZATION: ${LLM_GPU_UTILIZATION:-0.8}
+      LLM_MAX_MODEL_LENGTH: ${LLM_MAX_MODEL_LENGTH:-16384}
     volumes:
       # Copy config.example.yaml to config.yaml locally before running compose
       - ./llm/config.yaml:/app/llm/config.yaml:ro

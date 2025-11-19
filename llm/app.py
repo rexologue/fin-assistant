@@ -281,7 +281,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             available_news = await aggregator_client.get_news()
         except httpx.HTTPError as exc:
             logger.exception("Failed to fetch news from aggregator")
-            raise HTTPException(status_code=502, detail="News aggregator unavailable") from exc
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "News aggregator unavailable at "
+                    f"{config.aggregator.base_url}: {exc}"
+                ),
+            ) from exc
 
         if not available_news:
             logger.info("Aggregator returned no news; responding with empty list")

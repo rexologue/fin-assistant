@@ -159,4 +159,5 @@ If the LLM call fails or returns no structured tags, the service falls back to t
 
 - Ensure `news_aggregator/sources.json` contains valid RSS URLs; failures are logged per URL but do not abort the cycle.
 - If the LLM endpoint times out, check the vLLM server logs and GPU availability; the FastAPI service will temporarily serve fallback results.
+- A `502 News aggregator unavailable` error from the LLM service usually means it cannot reach the aggregator at `aggregator.base_url` (for example, a port mismatch between `llm/config.yaml` and `news_aggregator/config.yaml`/Docker Compose). Ensure both services expose the same host/port and that the aggregator container is running.
 - Clear the aggregator cache by deleting `news.parquet` in the configured `cache_dir`.

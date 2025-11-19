@@ -6,9 +6,27 @@ import os
 import subprocess
 import time
 from dataclasses import dataclass
+from shutil import which
 from typing import Optional
 
 import httpx
+
+
+def _has_nvidia_gpu() -> bool:
+    """Return True if a usable NVIDIA GPU appears to be available."""
+
+    nvidia_smi = which("nvidia-smi")
+    if not nvidia_smi:
+        return False
+
+    try:
+        result = subprocess.run(
+            [nvidia_smi, "-L"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+        )
+    except Exception:
+        return False
+
+    return result.returncode == 0
 
 
 @dataclass
@@ -37,6 +55,13 @@ class VLLMServer:
     def start(self) -> None:
         if self._process is not None:
             return
+
+        if not _has_nvidia_gpu():
+            raise RuntimeError(
+                "vLLM requires an NVIDIA GPU but none was detected. "
+                "Expose a GPU to the container before starting the server."
+            )
+
         command = [
             "python",
             "-m",

@@ -5,7 +5,7 @@ model:
   device_id: 0
   gpu_memory_utilization: 0.8
   max_model_len: 16384
-  autostart: false
+  autostart: true
 sampling:
   sample_size: 20
 aggregator:

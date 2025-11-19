@@ -24,8 +24,8 @@ WORKDIR /app
 COPY --from=build /wheels /wheels
 RUN python3 -m pip install --upgrade pip && pip install /wheels/flash_attn-2.8.3*.whl
 
-COPY ../install.sh ./install.sh
-RUN bash install.sh
+COPY llm/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY llm /app/llm
 RUN cp /app/llm/config.example.yaml /app/llm/config.yaml

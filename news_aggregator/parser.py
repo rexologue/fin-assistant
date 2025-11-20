@@ -37,14 +37,14 @@ class Parser:
             )
 
             if feed.source == "finam":
-                finam_news = parse_rss_http_string(feed.xml, feed.source)
+                finam_news = parse_rss_http_string(feed.xml, feed.source, feed.name)
 
                 for item in finam_news:
                     item.content = item.content.split("...")[0]
                     news[feed.name].append(item)
                 logger.info("Processed %d 'finam' items for %s", len(finam_news), feed.name)
             else:
-                parsed_items = parse_rss_http_string(feed.xml, feed.source)
+                parsed_items = parse_rss_http_string(feed.xml, feed.source, feed.name)
                 news[feed.name].extend(parsed_items)
                 logger.info(
                     "Processed %d items for feed '%s'", len(parsed_items), feed.name

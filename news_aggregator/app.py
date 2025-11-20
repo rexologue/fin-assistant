@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 class NewsCache:
     columns = [
         "source",
+        "name",
         "title",
         "content",
         "url",
@@ -86,6 +87,7 @@ class NewsCache:
     def _item_to_record(self, item: NewsItem) -> Dict[str, object]:
         return {
             "source": item.source,
+            "name": item.name,
             "title": item.title,
             "content": item.content,
             "url": item.url,
@@ -93,6 +95,14 @@ class NewsCache:
             "image_base64": item.image_base64,
             "guid": item.guid,
         }
+
+    def clear(self) -> None:
+        with self._lock:
+            if self.cache_file.exists():
+                self.cache_file.unlink()
+                logger.info("Cleared cache file at %s", self.cache_file)
+            else:
+                logger.debug("Cache file %s does not exist; nothing to clear", self.cache_file)
 
     def get_records(self) -> List[Dict[str, object]]:
         df = self._read_df()
@@ -157,11 +167,17 @@ class AggregationService:
         self.parser = Parser(config.sources_path)
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._cache_cleared = False
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             logger.info("AggregationService is already running")
             return
+
+        if self.config.update and not self._cache_cleared:
+            logger.info("Update flag enabled; clearing cache before start")
+            self.cache.clear()
+            self._cache_cleared = True
 
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._worker, name="news-worker", daemon=True)

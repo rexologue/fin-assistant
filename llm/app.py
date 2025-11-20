@@ -10,9 +10,15 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, conint
 
-from .config import AppConfig, VLLMServerConfig, load_app_config
-from .prompts import build_prompt
 from .vllm_host import VLLMChatClient, VLLMServer
+from .config import AppConfig, VLLMServerConfig, load_app_config
+from .prompts import (
+    build_news_rerank_prompt, 
+    parse_news_rerank_response,
+    build_news_translate_prompt,
+    parse_news_translate_response,
+    build_advice_prompt
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,33 +49,13 @@ class AggregatorClient:
     async def get_news(self) -> List[Dict[str, Any]]:
         url = f"{self.base_url}/news"
         logger.info("Requesting news from aggregator %s", url)
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()
             logger.info("Aggregator returned %d items", len(data))
             return data
-
-
-TAG_PATTERN = re.compile(
-    r"<src(?P<idx>\d+)>(?P<src>.*?)</src(?P=idx)>\s*"
-    r"<title(?P=idx)>(?P<title>.*?)</title(?P=idx)>\s*"
-    r"<content(?P=idx)>(?P<content>.*?)</content(?P=idx)>",
-    re.DOTALL,
-)
-
-
-def parse_llm_response(output: str) -> List[Dict[str, str]]:
-    results: List[Dict[str, str]] = []
-    for match in TAG_PATTERN.finditer(output.strip()):
-        results.append(
-            {
-                "source": match.group("src").strip(),
-                "title": match.group("title").strip(),
-                "content": match.group("content").strip(),
-            }
-        )
-    return results
 
 
 def enrich_results(
@@ -84,17 +70,22 @@ def enrich_results(
         ): item
         for item in sampled
     }
+
     enriched: List[NewsItemResponse] = []
     for entry in parsed:
         key = (entry["source"], entry["title"], entry["content"])
         original = lookup.get(key)
+
         if not original:
             logger.warning("LLM output entry missing in sampled data: %s", key)
+
         url_value = ""
         image_base64 = None
+
         if original:
             url_value = str(original.get("url") or "")
             image_base64 = original.get("image_base64")
+
         enriched.append(
             NewsItemResponse(
                 source=entry["source"],
@@ -104,7 +95,9 @@ def enrich_results(
                 image_base64=image_base64,
             )
         )
+
     logger.info("Enriched %d LLM entries with original metadata", len(enriched))
+
     return enriched
 
 
@@ -114,6 +107,7 @@ def fallback_selection(
 ) -> List[NewsItemResponse]:
     logger.info("Using fallback selection of up to %d sampled items", limit)
     fallback_items: List[NewsItemResponse] = []
+
     for item in sampled[:limit]:
         fallback_items.append(
             NewsItemResponse(
@@ -124,27 +118,34 @@ def fallback_selection(
                 image_base64=item.get("image_base64"),
             )
         )
+
     return fallback_items
 
 
 def sample_news(items: Sequence[Dict[str, Any]], sample_size: int) -> List[Dict[str, Any]]:
     if not items:
         return []
+    
     population = list(items)
+
     if len(population) <= sample_size:
         logger.info(
             "Available news count (%d) is less than or equal to sample size (%d); using all",
             len(population),
             sample_size,
         )
+
         return population
+    
     sampled = random.sample(population, sample_size)
     logger.info("Sampled %d news items out of %d", len(sampled), len(population))
+
     return sampled
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
     config = config or load_app_config()
+
     aggregator_client = AggregatorClient(
         base_url=config.aggregator.base_url,
         timeout=config.aggregator.timeout_seconds,
@@ -159,6 +160,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         gpu_memory_utilization=config.model.gpu_memory_utilization,
         max_model_len=config.model.max_model_len,
     )
+
     vllm_server = VLLMServer(vllm_config)
     llm_client = VLLMChatClient(vllm_server.base_url, model_name=str(config.model.path))
 
@@ -177,6 +179,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 vllm_server.start()
             except Exception:
                 logger.exception("Failed to start vLLM server")
+
         else:
             logger.info("vLLM autostart disabled via configuration")
 
@@ -201,8 +204,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         )
         try:
             available_news = await aggregator_client.get_news()
+
         except httpx.HTTPError as exc:
             logger.exception("Failed to fetch news from aggregator")
+
             raise HTTPException(
                 status_code=502,
                 detail=(
@@ -216,24 +221,68 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             return []
 
         sampled = sample_news(available_news, config.sampling.sample_size)
-        prompt = build_prompt(sampled, payload.top_spend_categories, payload.disliked_titles)
-        logger.info("Built prompt using %d sampled items", len(sampled))
+        logger.info("Sampled %d news items", len(sampled))
+
+        # Start re-ranking
+        prompt = build_news_rerank_prompt(sampled, payload.n, payload.top_spend_categories, payload.disliked_titles)
 
         llm_output: List[NewsItemResponse]
         try:
             response_text = await llm_client.generate(prompt)
-            parsed = parse_llm_response(response_text)
-            logger.info("Parsed %d entries from LLM response", len(parsed))
-            if not parsed:
+            reranked_idx = parse_news_rerank_response(response_text)
+            # logger.info("Parsed %d entries from LLM response", len(parsed))
+
+            if not reranked_idx:
                 logger.warning("LLM response was empty or could not be parsed; using fallback")
-                llm_output = fallback_selection(sampled, payload.n)
+                raise RuntimeError
+
             else:
-                enriched = enrich_results(parsed, sampled)
+                reranked_idx = [i for i in reranked_idx if 0 <= i < config.sampling.sample_size]
+
+                if len(reranked_idx) == 0:
+                    logger.warning("LLM response was empty or could not be parsed; using fallback")
+                    raise RuntimeError
+
+                reqs = []
+                for news_idx in reranked_idx:
+                    item = sampled[news_idx]
+                    reqs.append(
+                        build_news_translate_prompt(item['title'], item['content'])
+                    )
+
+                outputs = await llm_client.generate(reqs)
+                output_news = []
+
+                for raw_output, idx in zip(outputs, reranked_idx):
+                    item = sampled[idx]
+
+                    parsed = parse_news_translate_response(raw_output)
+                    if parsed is None:
+                        logger.warning(
+                            "Failed to parse translate response for index %d; keeping original text",
+                            idx,
+                        )
+                        # Просто используем оригинальный item без модификации
+                        output_news.append(item)
+                        continue
+
+                    title, content = parsed
+
+                    if title:
+                        item['title'] = title
+                    if content:
+                        item['content'] = content
+
+                    output_news.append(item)
+
+
+                enriched = enrich_results(output_news, sampled)
                 llm_output = enriched[: payload.n]
                 logger.info(
                     "LLM pipeline returning %d items after enrichment", len(llm_output)
                 )
-        except (httpx.HTTPError, RuntimeError) as exc:
+
+        except (httpx.HTTPError, RuntimeError, IndexError) as exc:
             logger.exception("LLM inference failed; returning fallback data")
             llm_output = fallback_selection(sampled, payload.n)
 
@@ -241,6 +290,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     @app.get("/advice")
     async def get_advice() -> Dict[str, str]:
+        
         return {"status": "Not implemented yet"}
 
     return app

@@ -1,8 +1,0 @@
-# Default configuration for the news aggregator application
-host: 0.0.0.0
-port: 8000
-cache_dir: ~/news_cache
-period: 1d
-passive_mode_dur: 300
-update: false
-# sources_path can be provided to override the default sources.json file

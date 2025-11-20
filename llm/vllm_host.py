@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 import os
-import subprocess
 import time
+import asyncio
+import logging
+import subprocess
 from shutil import which
-from typing import Optional
+from typing import List, Sequence, Optional, overload
 
 import httpx
 
@@ -135,13 +136,33 @@ class VLLMChatClient:
         self.model_name = model_name
         self.timeout = timeout
 
+    # --- type-level overloads для mypy/pyright ---
+
+    @overload
     async def generate(self, prompt: str) -> str:
-        logger.info(
-            "Sending prompt to LLM model %s (chars=%d)",
-            self.model_name,
-            len(prompt),
-        )
-        payload = {
+        ...
+
+    @overload
+    async def generate(self, prompt: Sequence[str]) -> List[str]:
+        ...
+
+    # --- реальная реализация ---
+
+    async def generate(self, prompt: str | Sequence[str]) -> str | List[str]:
+        """
+        Если передан str -> вернёт str.
+        Если передан список строк -> вернёт список строк той же длины.
+        """
+        if isinstance(prompt, str):
+            return await self._generate_single(prompt)
+
+        prompts = list(prompt)
+        return await self._generate_batch(prompts)
+
+    # --- внутренние вспомогательные методы ---
+
+    def _build_payload(self, prompt: str) -> dict:
+        return {
             "model": self.model_name,
             "messages": [
                 {"role": "user", "content": prompt},
@@ -149,20 +170,71 @@ class VLLMChatClient:
             "temperature": 0.2,
             "max_tokens": 1024,
         }
+
+    def _parse_response_content(self, data: dict) -> str:
+        choices = data.get("choices", [])
+        if not choices:
+            raise RuntimeError("LLM response did not contain any choices")
+
+        message = choices[0].get("message", {})
+        content = message.get("content")
+
+        if not isinstance(content, str):
+            raise RuntimeError("LLM response did not include textual content")
+
+        return content.strip()
+
+    async def _generate_single(self, prompt: str) -> str:
+        logger.info(
+            "Sending prompt to LLM model %s (chars=%d)",
+            self.model_name,
+            len(prompt),
+        )
+
         url = f"{self.base_url}/v1/chat/completions"
+        payload = self._build_payload(prompt)
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
-            data = response.json()
-            choices = data.get("choices", [])
-            if not choices:
-                raise RuntimeError("LLM response did not contain any choices")
-            message = choices[0].get("message", {})
-            content = message.get("content")
-            if not isinstance(content, str):
-                raise RuntimeError("LLM response did not include textual content")
-            logger.info("Received LLM response (%d bytes)", len(content))
-            return content.strip()
+            content = self._parse_response_content(response.json())
+
+        logger.info("Received LLM response (%d bytes)", len(content))
+        return content
+
+    async def _generate_batch(self, prompts: Sequence[str]) -> List[str]:
+        logger.info(
+            "Sending batch of %d prompts to LLM model %s",
+            len(prompts),
+            self.model_name,
+        )
+
+        url = f"{self.base_url}/v1/chat/completions"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            tasks = [
+                self._post_and_parse(client, url, prompt)
+                for prompt in prompts
+            ]
+            results = await asyncio.gather(*tasks)
+
+        logger.info(
+            "Received batch LLM responses (bytes per item: %s)",
+            [len(r) for r in results],
+        )
+        return list(results)
+
+    async def _post_and_parse(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        prompt: str,
+    ) -> str:
+        payload = self._build_payload(prompt)
+        response = await client.post(url, json=payload)
+        response.raise_for_status()
+        content = self._parse_response_content(response.json())
+        return content
 
 
 __all__ = ["VLLMChatClient", "VLLMServer", "VLLMServerConfig"]

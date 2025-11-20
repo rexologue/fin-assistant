@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: LLM Service API
+  version: "1.0.0"
+  description: |
+    FastAPI gateway that samples cached news, builds prompts, calls a vLLM server, and returns curated results.
+servers:
+  - url: http://localhost:18300
+paths:
+  /news:
+    post:
+      summary: Request curated news
+      description: |
+        Fetch cached news from the aggregator, sample entries, rerank/translate them with the LLM, and return up to `n` items.
+        Falls back to sampled items if the LLM is unreachable or the response cannot be parsed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewsRequest'
+            examples:
+              default:
+                value:
+                  n: 3
+                  top_spend_categories:
+                    - Инвестиции
+                    - Технологии
+                  disliked_titles:
+                    - Дефолт
+                    - Госдолг
+      responses:
+        '200':
+          description: Curated news items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NewsItemResponse'
+              examples:
+                success:
+                  value:
+                    - source: Finam
+                      title: "Технологические акции растут после отчётов"
+                      content: "Компании полупроводников и облачных сервисов демонстрируют рост..."
+                      original_url: https://www.finam.ru/...
+                      image_base64: null
+                    - source: Reuters
+                      title: "Инвесторы увеличивают долю в ETF на развивающиеся рынки"
+                      content: "Приток капитала связан со снижением опасений по поводу ставок..."
+                      original_url: https://reuters.com/...
+                      image_base64: null
+        '400':
+          description: Validation error for the request body
+        '502':
+          description: Aggregator unreachable or LLM failed to return usable output
+  /advice:
+    post:
+      summary: Request budgeting advice
+      description: Build a budgeting prompt from provided earnings, expenses, and wishes, then return structured advice.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdviceRequest'
+            examples:
+              default:
+                value:
+                  earnings: 120000
+                  wastes:
+                    housing: 35000
+                    food: 20000
+                    transport: 8000
+                  wishes: "Хочу откладывать на подушку безопасности"
+      responses:
+        '200':
+          description: Advice payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdviceResponse'
+              examples:
+                sample:
+                  value:
+                    earnings: 120000
+                    wastes:
+                      housing: 35000
+                      food: 20000
+                      transport: 8000
+                    comment: "Сократите расходы на рестораны и перенаправьте 10% дохода в накопления."
+        '400':
+          description: Validation error for the request body
+        '502':
+          description: vLLM failed to return valid JSON
+components:
+  schemas:
+    NewsRequest:
+      type: object
+      properties:
+        n:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Desired number of items to return
+        top_spend_categories:
+          type: array
+          items:
+            type: string
+          description: Priority categories to focus on
+        disliked_titles:
+          type: array
+          items:
+            type: string
+          description: Titles or keywords to avoid
+          default: []
+      required:
+        - n
+        - top_spend_categories
+    NewsItemResponse:
+      type: object
+      properties:
+        source:
+          type: string
+          description: Source name returned to the user
+        title:
+          type: string
+        content:
+          type: string
+        original_url:
+          type: string
+          format: uri
+          description: Link to the original article
+        image_base64:
+          type: string
+          nullable: true
+      required:
+        - source
+        - title
+        - content
+        - original_url
+    AdviceRequest:
+      type: object
+      properties:
+        earnings:
+          type: number
+          format: float
+        wastes:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+        wishes:
+          type: string
+      required:
+        - earnings
+        - wastes
+        - wishes
+    AdviceResponse:
+      type: object
+      properties:
+        earnings:
+          type: number
+          format: float
+        wastes:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+        comment:
+          type: string
+      required:
+        - earnings
+        - wastes
+        - comment

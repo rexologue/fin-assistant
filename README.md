@@ -1,163 +1,93 @@
-# Fin Assistant Platform
+# Fin Assistant
 
-Fin Assistant combines two FastAPI-based services:
+Fin Assistant is a two-service platform that gathers financial news and delivers curated, LLM-enhanced results. It is designed to be the single entry point for developers and operators: this README introduces the architecture, how the services talk to each other, how to deploy them (Docker Compose first), and where to find deeper documentation for each component.
 
-- **news_aggregator** – continuously fetches and normalizes financial news from RSS feeds, caching the results locally.
-- **llm** – samples cached news, builds a prompt with user preferences, calls an LLM (vLLM-compatible) to select and optionally translate the best items, and exposes them through a simplified API.
-
-The services can run independently or together via Docker Compose. The following sections describe the architecture, configuration, and example API interactions for both apps.
-
-## High-level architecture
+## System architecture
 
 ```
-┌─────────────────────┐       ┌────────────────────────────────┐       ┌───────────────────────────┐
-│  External RSS feeds │ ====> │ news_aggregator (FastAPI)      │ ====> │ Parquet cache (news.parquet│
-└─────────────────────┘       │ - Fetch + parse RSS            │       └───────────────────────────┘
-                              │ - Deduplicate + TTL filtering  │
-                              │ - Expose /news, /titles        │
-                              └──────────────┬─────────────────┘
-                                             │ HTTP JSON
-                                             ▼
-                              ┌────────────────────────────────┐        ┌─────────────────────────┐
-                              │ llm (FastAPI)                 │ <====> │ vLLM server (OpenAI API)│
-                              │ - Sample cached news          │        │ (autostart optional)    │
-                              │ - Build Russian prompt        │        │                         │
-                              │ - Parse + enrich LLM output   │
-                              │ - Expose /news                │
-                              └────────────────────────────────┘
+┌──────────────────┐      ┌──────────────────────────────┐      ┌──────────────────────────┐
+│ External RSS/XML │ ---> │ news-aggregator (FastAPI)    │ ---> │ Parquet cache on volume   │
+└──────────────────┘      │ - Fetch + parse RSS/Atom     │      └──────────────────────────┘
+                          │ - Deduplicate + TTL cleanup  │
+                          │ - Expose /news and /titles   │
+                          └──────────────┬──────────────┘
+                                         │ HTTP JSON
+                                         ▼
+                          ┌──────────────────────────────┐      ┌──────────────────────────┐
+                          │ llm (FastAPI)                │ <--> │ vLLM server (OpenAI API) │
+                          │ - Sample cached news         │      │ (autostart optional)     │
+                          │ - Build + parse prompts      │      │                          │
+                          │ - Expose /news and /advice   │      │                          │
+                          └──────────────────────────────┘      └──────────────────────────┘
 ```
 
-### Service responsibilities
+### How the services interact
+- The **news-aggregator** fetches feeds defined in `news_aggregator/sources.json`, deduplicates items, and stores them in `news.parquet` inside a configurable cache directory.
+- The **llm** service calls the aggregator’s `/news` endpoint, samples items, builds prompts, calls a vLLM server via the OpenAI-compatible API, post-processes responses, and returns curated items. When the model cannot return valid structure, it falls back to the sampled news.
+- vLLM can be autostarted by the llm container or run externally. The llm service only requires the OpenAI-compatible `/v1/chat/completions` endpoint to be reachable.
 
-- **news_aggregator**
-  - Loads RSS sources from `news_aggregator/sources.json`.
-  - `Fetcher` downloads feeds, `Parser` converts them into structured `NewsItem` objects, and `AggregationService` writes them to a Parquet cache (`cache_dir/news.parquet`).
-  - Items older than the configured `period` are purged every active cycle; duplicate detection uses source/title/url/guid identity keys.
-  - Provides read-only endpoints `/news` (full records) and `/titles` (headlines only).
+## High-level functionality
+- Continuously ingest RSS/Atom financial news.
+- Persist news to a Parquet cache with deduplication and retention windows.
+- Provide lightweight read endpoints for titles and full news items.
+- Offer LLM-backed endpoints to rerank and optionally translate the news, or provide budgeting advice.
 
-- **llm**
-  - Calls the aggregator (`AggregatorClient`) to fetch cached news, samples a subset (`sample_news`), and builds a Russian-language prompt with the user’s top spending categories and disliked titles.
-  - Sends the prompt to a vLLM server through the OpenAI-compatible `/v1/chat/completions` API (`VLLMChatClient`).
-  - Parses structured tags from the response, enriches entries with original URLs/images, and falls back to the sampled items on failure.
-  - Exposes `/news` to request curated articles; `/advice` is a placeholder.
+## Deploying with Docker Compose (recommended)
+1. Copy example configs:
+   ```bash
+   cp news_aggregator/config.example.yaml news_aggregator/config.yaml
+   cp llm/config.example.yaml llm/config.yaml
+   ```
+2. Prepare a model directory (e.g., `./models/your-model`) that vLLM can load. It will be mounted at `/model`.
+3. Start the stack:
+   ```bash
+   docker compose -f docker-compose.example.yaml up --build
+   ```
+   - `news-aggregator` listens on `8000` and writes cache data to `./news_aggregator/cache` (mounted to `/cache`).
+   - `llm-service` uses `network_mode: host` in the example file so it can reach the aggregator at `localhost:8000` and expose `18300`.
+   - Environment variables in `docker-compose.example.yaml` override cache directory, polling periods, sampling size, GPU utilization, and model length limits.
 
-## Running the stack
+## Basic usage
+- Check cached titles:
+  ```bash
+  curl http://localhost:8000/titles
+  ```
+- Retrieve cached news records:
+  ```bash
+  curl http://localhost:8000/news
+  ```
+- Request curated articles from the LLM service:
+  ```bash
+  curl -X POST http://localhost:18300/news \
+    -H "Content-Type: application/json" \
+    -d '{
+      "n": 5,
+      "top_spend_categories": ["Путешествия", "Инвестиции", "Технологии"],
+      "disliked_titles": ["Госдолг", "Нефть"]
+    }'
+  ```
+- Request budgeting advice:
+  ```bash
+  curl -X POST http://localhost:18300/advice \
+    -H "Content-Type: application/json" \
+    -d '{
+      "earnings": 100000,
+      "wastes": {"rent": 40000, "restaurants": 15000},
+      "wishes": "Собрать подушку безопасности за 6 месяцев"
+    }'
+  ```
 
-### Docker Compose (recommended)
+## Documentation by component
+- [news-aggregator README](news_aggregator/README.md) — pipeline, configuration, API, examples, persistence notes, and swagger spec.
+- [llm README](llm/README.md) — configuration loading, vLLM initialization, endpoints, prompt lifecycle, examples, and swagger spec.
+- Reference Docker Compose wiring: [`docker-compose.example.yaml`](docker-compose.example.yaml).
 
-1. Copy example configs: `cp news_aggregator/config.example.yaml news_aggregator/config.yaml` and `cp llm/config.example.yaml llm/config.yaml`.
-2. Provide an LLM model directory under `./models` (mounted at `/model` for vLLM).
-3. Start both services:
+## Development notes
+- Both services are FastAPI apps and can run locally via `uvicorn` (`news_aggregator.app:app` on port 8000, `llm.app:app` on port 18300).
+- Configuration files live alongside each service (`config.yaml`, with `config.example.yaml` for defaults). Environment variables can override key settings for containerized deployments.
 
-```bash
-docker compose -f docker-compose.example.yaml up --build
-```
-
-Environment variables in `docker-compose.example.yaml` allow overriding cache location, polling periods, sampling size, and LLM memory limits.
-
-### Local development
-
-- **Aggregator**: `uvicorn news_aggregator.app:app --host 0.0.0.0 --port 8000`
-- **LLM service**: ensure `llm/config.yaml` points to a running vLLM server (or enable `autostart`), then `uvicorn llm.app:app --host 0.0.0.0 --port 18300`.
-
-## Configuration highlights
-
-### Aggregator (`news_aggregator/config.yaml`)
-
-- `cache_dir`: where `news.parquet` is written (default `~/news_cache`).
-- `period`: retention window (e.g., `1d`, `12h`, `2w`).
-- `passive_mode_dur`: sleep between background cycles (seconds).
-- `sources_path`: optional override for the RSS list JSON.
-
-Key env overrides: `NEWS_AGGREGATOR_CONFIG`, `NEWS_AGGREGATOR_CACHE_DIR`, `NEWS_AGGREGATOR_PERIOD`, `NEWS_AGGREGATOR_PASSIVE_MODE_DUR`.
-
-### LLM service (`llm/config.yaml`)
-
-- `model`: vLLM host/port, path, quantization, GPU utilization, `max_model_len`, and `autostart` toggle.
-- `sampling.sample_size`: how many cached news items to include in each prompt.
-- `aggregator.base_url` and `timeout_seconds`: where to reach the news service.
-- `app.host`/`app.port`: FastAPI bind address.
-
-Key env overrides (when `docker: true`): `LLM_MODEL_PATH`, `LLM_MODEL_HOST`, `LLM_GPU_UTILIZATION`, `LLM_MAX_MODEL_LENGTH`, `LLM_SAMPLING_SAMPLE_SIZE`, `LLM_AGGREGATOR_HOST`, `LLM_AGGREGATOR_PORT`, `LLM_AGGREGATOR_TIMEOUT_SECONDS`, `LLM_APP_HOST`, `LLM_APP_PORT`.
-
-## API usage examples
-
-### news_aggregator
-
-- **List titles**
-
-```bash
-curl http://localhost:8000/titles
-```
-
-_Response (truncated):_
-```json
-[
-  "ФРС США повысила ставку...",
-  "ЦБ РФ опубликовал отчет..."
-]
-```
-
-- **Fetch full news records**
-
-```bash
-curl http://localhost:8000/news
-```
-
-Each record includes `source`, `title`, `content`, `url`, `published_at` (ISO-8601), optional `image_base64`, and `guid`.
-
-### llm
-
-Request curated articles tailored to user spending preferences and disliked titles. The service samples cached news and asks the LLM to select or translate entries into Russian.
-
-```bash
-curl -X POST http://localhost:18300/news \
-  -H "Content-Type: application/json" \
-  -d '{
-    "n": 5,
-    "top_spend_categories": ["Путешествия", "Инвестиции", "Технологии"],
-    "disliked_titles": ["Госдолг", "Нефть"]
-  }'
-```
-
-_Response example (LLM success path):_
-```json
-[
-  {
-    "source": "Fed",
-    "title": "ФРС сигнализирует о сохранении ставки",
-    "content": "Регулятор подтвердил текущий диапазон и указал на снижение инфляции...",
-    "original_url": "https://www.federalreserve.gov/...",
-    "image_base64": null
-  },
-  {
-    "source": "Коммерсант",
-    "title": "Банки наращивают ипотечные программы",
-    "content": "Рынок ожидает снижения ключевой ставки, спрос на жилье растет...",
-    "original_url": "https://www.kommersant.ru/...",
-    "image_base64": null
-  }
-]
-```
-
-If the LLM call fails or returns no structured tags, the service falls back to the sampled news items (first `n` entries) with their original content.
-
-## Data lifecycle and deduplication
-
-1. Background worker fetches RSS feeds every `passive_mode_dur` seconds.
-2. Items older than `period` are removed from the cache.
-3. New items are identified by `guid` → `url` → `source:title` (in that priority) to avoid duplicates across runs.
-4. Cached data is served directly via `/news` and `/titles`, providing low-latency reads for the LLM service.
-
-## Project layout
-
-- `news_aggregator/` – FastAPI service for fetching, parsing, and caching RSS feeds.
-- `llm/` – FastAPI service for LLM-backed news curation; starts vLLM locally when `autostart` is enabled.
-- `docker-compose.example.yaml` – reference compose file wiring both services with GPU reservation for vLLM.
-
-## Troubleshooting
-
-- Ensure `news_aggregator/sources.json` contains valid RSS URLs; failures are logged per URL but do not abort the cycle.
-- If the LLM endpoint times out, check the vLLM server logs and GPU availability; the FastAPI service will temporarily serve fallback results.
-- A `502 News aggregator unavailable` error from the LLM service usually means it cannot reach the aggregator at `aggregator.base_url` (for example, a port mismatch between `llm/config.yaml` and `news_aggregator/config.yaml`/Docker Compose). Ensure both services expose the same host/port and that the aggregator container is running.
-- Clear the aggregator cache by deleting `news.parquet` in the configured `cache_dir`.
+## API specifications
+Each service ships with its own OpenAPI document:
+- [`news_aggregator/swagger.yaml`](news_aggregator/swagger.yaml)
+- [`llm/swagger.yaml`](llm/swagger.yaml)
+These files describe endpoints, schemas, parameters, and example payloads to enable client generation.

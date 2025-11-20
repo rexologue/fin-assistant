@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import time
-from dataclasses import dataclass
 from shutil import which
 from typing import Optional
 
 import httpx
+
+from .config import VLLMServerConfig
+
+logger = logging.getLogger(__name__)
 
 
 def _has_nvidia_gpu() -> bool:
@@ -27,18 +31,6 @@ def _has_nvidia_gpu() -> bool:
         return False
 
     return result.returncode == 0
-
-
-@dataclass
-class VLLMServerConfig:
-    model_name: str
-    host: str
-    port: int
-    timeout_seconds: int = 900
-    device_id: int = 0
-    quantization: str | None = None
-    gpu_memory_utilization: float | None = None
-    max_model_len: int | None = None
 
 
 class VLLMServer:
@@ -92,7 +84,7 @@ class VLLMServer:
         # env.setdefault("VLLM_USE_V1", "0")
         # env.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
         # env.setdefault("CUDA_VISIBLE_DEVICES", str(self.config.device_id))
-        
+
         self._process = subprocess.Popen(command, env=env)
 
         try:
@@ -104,7 +96,7 @@ class VLLMServer:
     def stop(self) -> None:
         if self._process is None:
             return
-        
+
         self._process.terminate()
 
         try:
@@ -122,19 +114,55 @@ class VLLMServer:
             while True:
                 if self._process and self._process.poll() is not None:
                     raise RuntimeError("vLLM server exited unexpectedly while starting")
-                
+
                 try:
                     response = client.get(f"{self.base_url}/health", timeout=10)
                     if response.status_code == 200:
                         return
-                    
+
                 except Exception:
                     pass
 
                 if time.time() - start > timeout:
                     raise TimeoutError("Timed out waiting for vLLM server to become ready")
-                
+
                 time.sleep(2)
 
 
-__all__ = ["VLLMServer", "VLLMServerConfig"]
+class VLLMChatClient:
+    def __init__(self, base_url: str, model_name: str, timeout: float = 120.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model_name = model_name
+        self.timeout = timeout
+
+    async def generate(self, prompt: str) -> str:
+        logger.info(
+            "Sending prompt to LLM model %s (chars=%d)",
+            self.model_name,
+            len(prompt),
+        )
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.2,
+            "max_tokens": 1024,
+        }
+        url = f"{self.base_url}/v1/chat/completions"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            choices = data.get("choices", [])
+            if not choices:
+                raise RuntimeError("LLM response did not contain any choices")
+            message = choices[0].get("message", {})
+            content = message.get("content")
+            if not isinstance(content, str):
+                raise RuntimeError("LLM response did not include textual content")
+            logger.info("Received LLM response (%d bytes)", len(content))
+            return content.strip()
+
+
+__all__ = ["VLLMChatClient", "VLLMServer", "VLLMServerConfig"]

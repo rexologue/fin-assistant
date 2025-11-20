@@ -46,6 +46,18 @@ class AggregatorConfig:
 
 
 @dataclass
+class VLLMServerConfig:
+    model_name: str
+    host: str
+    port: int
+    timeout_seconds: int = 900
+    device_id: int = 0
+    quantization: str | None = None
+    gpu_memory_utilization: float | None = None
+    max_model_len: int | None = None
+
+
+@dataclass
 class AppRuntimeConfig:
     host: str = "0.0.0.0"
     port: int = 18300
@@ -184,6 +196,7 @@ __all__ = [
     "ModelConfig",
     "SamplingConfig",
     "AggregatorConfig",
+    "VLLMServerConfig",
     "load_app_config",
     "DEFAULT_CONFIG_PATH",
 ]

@@ -10,8 +10,9 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, conint
 
-from .config import AppConfig, load_app_config
-from .vllm_server import VLLMServer, VLLMServerConfig
+from .config import AppConfig, VLLMServerConfig, load_app_config
+from .prompts import build_prompt
+from .vllm_host import VLLMChatClient, VLLMServer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,91 +51,12 @@ class AggregatorClient:
             return data
 
 
-class VLLMChatClient:
-    def __init__(self, base_url: str, model_name: str, timeout: float = 120.0) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.model_name = model_name
-        self.timeout = timeout
-
-    async def generate(self, prompt: str) -> str:
-        logger.info(
-            "Sending prompt to LLM model %s (chars=%d)",
-            self.model_name,
-            len(prompt),
-        )
-        payload = {
-            "model": self.model_name,
-            "messages": [
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.2,
-            "max_tokens": 1024,
-        }
-        url = f"{self.base_url}/v1/chat/completions"
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            choices = data.get("choices", [])
-            if not choices:
-                raise RuntimeError("LLM response did not contain any choices")
-            message = choices[0].get("message", {})
-            content = message.get("content")
-            if not isinstance(content, str):
-                raise RuntimeError("LLM response did not include textual content")
-            logger.info("Received LLM response (%d bytes)", len(content))
-            return content.strip()
-
-
 TAG_PATTERN = re.compile(
     r"<src(?P<idx>\d+)>(?P<src>.*?)</src(?P=idx)>\s*"
     r"<title(?P=idx)>(?P<title>.*?)</title(?P=idx)>\s*"
     r"<content(?P=idx)>(?P<content>.*?)</content(?P=idx)>",
     re.DOTALL,
 )
-
-
-PROMPT_TEMPLATE = (
-    "Ты — интеллектуальный помощник по выбору финансовых новостей для пользователя.\n\n"
-    "Тебе передан список новостей, предпочтения пользователя по расходам и список заголовков, "
-    "которые ему ранее НЕ понравились.\n\n"
-    "СПИСОК НОВОСТЕЙ:\n{news_list}\n\n"
-    "ТОП НАПРАВЛЕНИЙ ТРАТ:\n{top_spend_categories}\n\n"
-    "ЗАГОЛОВКИ, КОТОРЫЕ НЕ НРАВЯТСЯ:\n{disliked_titles}\n\n"
-    "Требования:\n"
-    "1) Выбери только релевантные новости с учётом направлений трат.\n"
-    "2) Игнорируй новости с заголовками из списка дизлайков.\n"
-    "3) Не выводи дубликаты.\n"
-    "4) Если новость уже на русском языке, не изменяй её текст.\n"
-    "5) Если новость на другом языке, переведи её на русский без искажения фактов и смысла.\n"
-    "6) Все ответы должны быть на русском языке.\n\n"
-    "Формат ответа: последовательность тегов <srcN>, <titleN>, <contentN> без комментариев.\n"
-    "Если ничего не подходит, верни пустую строку."
-)
-
-
-def format_news_blocks(items: Sequence[Dict[str, Any]]) -> str:
-    blocks: List[str] = []
-    for idx, item in enumerate(items, start=1):
-        block = (
-            f"[НОВОСТЬ {idx}]\n"
-            f"source: {item.get('source', '')}\n"
-            f"title: {item.get('title', '')}\n"
-            f"content: {item.get('content', '')}\n"
-        )
-        blocks.append(block)
-    return "\n".join(blocks)
-
-
-def build_prompt(sampled: Sequence[Dict[str, Any]], top_spend: Sequence[str], disliked: Sequence[str]) -> str:
-    news_list = format_news_blocks(sampled)
-    top_spend_str = ", ".join(top_spend) if top_spend else "нет данных"
-    disliked_str = "\n".join(disliked) if disliked else "нет"
-    return PROMPT_TEMPLATE.format(
-        news_list=news_list,
-        top_spend_categories=top_spend_str,
-        disliked_titles=disliked_str,
-    )
 
 
 def parse_llm_response(output: str) -> List[Dict[str, str]]:

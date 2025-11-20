@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 from typing import Any, Dict, List, Sequence, Tuple, Optional
 
 NEWS_PROMPT = (
@@ -118,7 +119,8 @@ def build_news_translate_prompt(title: str, content: str) -> str:
     )
 
 def build_advice_prompt(user_data: dict) -> str:
-    return BUDGET_ADVICE_PROMPT.format(user_data=user_data)
+    pretty = json.dumps(user_data, ensure_ascii=False, indent=2)
+    return BUDGET_ADVICE_PROMPT.replace("{user_data}", pretty)
 
 def parse_news_rerank_response(output: str) -> Optional[List[int]]:
     # Находим содержимое внутри <out>...</out>

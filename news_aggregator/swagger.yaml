@@ -1,0 +1,91 @@
+openapi: 3.0.3
+info:
+  title: News Aggregator API
+  version: "1.0.0"
+  description: |
+    FastAPI service that fetches RSS/Atom feeds, normalizes them, and serves cached results.
+    Responses are read from the on-disk Parquet cache and are read-only.
+servers:
+  - url: http://localhost:8000
+paths:
+  /news:
+    get:
+      summary: Get cached news items
+      description: Return all cached news records currently stored in the Parquet cache.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NewsItem'
+              examples:
+                sample:
+                  value:
+                    - source: finam
+                      name: Finam
+                      title: "ФРС сигнализирует о сохранении ставки"
+                      content: "Регулятор подтвердил текущий диапазон и указал на снижение инфляции..."
+                      url: https://www.finam.ru/...
+                      published_at: "2024-05-01T10:00:00+00:00"
+                      image_base64: null
+                      guid: abc-123
+        '500':
+          description: Unexpected error reading the cache
+  /titles:
+    get:
+      summary: Get cached titles
+      description: Return a list of titles for all cached news items.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+              examples:
+                sample:
+                  value:
+                    - "ФРС США повысила ставку..."
+                    - "ЦБ РФ опубликовал отчет..."
+components:
+  schemas:
+    NewsItem:
+      type: object
+      properties:
+        source:
+          type: string
+          description: Source identifier from the feed list
+        name:
+          type: string
+          description: Human-friendly source name
+        title:
+          type: string
+        content:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: Original link to the article
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        image_base64:
+          type: string
+          nullable: true
+          description: Base64-encoded image data if available
+        guid:
+          type: string
+          nullable: true
+          description: GUID or unique identifier from the feed
+      required:
+        - source
+        - name
+        - title
+        - content
+        - url

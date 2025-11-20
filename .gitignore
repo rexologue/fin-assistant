@@ -1430,7 +1430,9 @@ CMakeUserPresets.json
 
 *.yaml
 !news_aggregator/config.example.yaml
+!news_aggregator/swagger.yaml
 !llm/config.example.yaml
+!llm/swagger.yaml
 !config.example.yaml
 !docker-compose.example.yaml
 

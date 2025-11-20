@@ -64,7 +64,7 @@ def enrich_results(
 ) -> List[NewsItemResponse]:
     lookup = {
         (
-            str(item.get("source", "")).strip(),
+            str(item.get("name", "")).strip(),
             str(item.get("title", "")).strip(),
             str(item.get("content", "")).strip(),
         ): item
@@ -73,7 +73,7 @@ def enrich_results(
 
     enriched: List[NewsItemResponse] = []
     for entry in parsed:
-        key = (entry["source"], entry["title"], entry["content"])
+        key = (entry["name"], entry["title"], entry["content"])
         original = lookup.get(key)
 
         if not original:
@@ -88,7 +88,7 @@ def enrich_results(
 
         enriched.append(
             NewsItemResponse(
-                source=entry["source"],
+                source=entry["name"],
                 title=entry["title"],
                 content=entry["content"],
                 original_url=url_value,
@@ -111,7 +111,7 @@ def fallback_selection(
     for item in sampled[:limit]:
         fallback_items.append(
             NewsItemResponse(
-                source=str(item.get("source", "")),
+                source=str(item.get("name", "")),
                 title=str(item.get("title", "")),
                 content=str(item.get("content", "")),
                 original_url=str(item.get("url") or ""),
@@ -290,7 +290,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     @app.get("/advice")
     async def get_advice() -> Dict[str, str]:
-        
+
         return {"status": "Not implemented yet"}
 
     return app

@@ -154,11 +154,12 @@ def parse_news_translate_response(output: str) -> Optional[Tuple[str, str]]:
     return title, content
 
 __all__ = [
-    "NEWS_PROMPT", 
+    "NEWS_PROMPT",
     "NEWS_TRANSLATION_PROMPT",
     "format_news_blocks",
-    "build_news_rerank_prompt", 
-    "build_news_translate_prompt", 
+    "build_news_rerank_prompt",
+    "build_news_translate_prompt",
+    "build_advice_prompt",
     "parse_news_rerank_response",
     "parse_news_translate_response"
 ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import random
 import re
@@ -31,6 +32,18 @@ class NewsRequest(BaseModel):
     n: conint(ge=1, le=10) = Field(..., description="Desired number of news items to return")
     top_spend_categories: List[str]
     disliked_titles: List[str] = Field(default_factory=list)
+
+
+class AdviceRequest(BaseModel):
+    earnings: float
+    wastes: Dict[str, float]
+    wishes: str
+
+
+class AdviceResponse(BaseModel):
+    earnings: float
+    wastes: Dict[str, float]
+    comment: str
 
 
 class NewsItemResponse(BaseModel):
@@ -288,10 +301,43 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
         return llm_output
 
-    @app.get("/advice")
-    async def get_advice() -> Dict[str, str]:
+    @app.post("/advice", response_model=AdviceResponse)
+    async def post_advice(payload: AdviceRequest) -> AdviceResponse:
+        logger.info(
+            "Received /advice request with %d waste categories",
+            len(payload.wastes),
+        )
 
-        return {"status": "Not implemented yet"}
+        prompt = build_advice_prompt(payload.model_dump())
+
+        try:
+            response_text = await llm_client.generate(prompt)
+        except httpx.HTTPError as exc:
+            logger.exception("LLM inference failed for /advice")
+            raise HTTPException(
+                status_code=502,
+                detail="Advice model is unavailable",
+            ) from exc
+
+        try:
+            parsed_json = json.loads(response_text)
+        except json.JSONDecodeError as exc:
+            logger.exception("LLM returned invalid JSON for /advice")
+            raise HTTPException(
+                status_code=502,
+                detail="Advice model returned invalid JSON",
+            ) from exc
+
+        try:
+            advice = AdviceResponse.model_validate(parsed_json)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Advice response validation failed")
+            raise HTTPException(
+                status_code=502,
+                detail="Advice model returned unexpected structure",
+            ) from exc
+
+        return advice
 
     return app
 

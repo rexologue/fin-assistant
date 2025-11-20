@@ -10,6 +10,7 @@ CONFIG_ENV_VAR = "NEWS_AGGREGATOR_CONFIG"
 PERIOD_ENV_VAR = "NEWS_AGGREGATOR_PERIOD"
 PASSIVE_MODE_ENV_VAR = "NEWS_AGGREGATOR_PASSIVE_MODE_DUR"
 CACHE_DIR_ENV_VAR = "NEWS_AGGREGATOR_CACHE_DIR"
+UPDATE_ENV_VAR = "NEWS_AGGREGATOR_UPDATE"
 
 DEFAULT_PASSIVE_MODE_SECONDS = 300
 DEFAULT_CACHE_DIR = Path.home() / "news_cache"
@@ -35,12 +36,13 @@ class RawFeed:
 @dataclass
 class NewsItem:
     source: str                         # имя источника
+    name: str                           # отображаемое имя источника
     title: str
-    content: str             
+    content: str
     url: str                            # ссылка на реальную новость
     published_at: Optional[datetime]
     image_base64: Optional[str] = None
-    guid: Optional[str] = None  
+    guid: Optional[str] = None
 
 
 @dataclass
@@ -51,6 +53,7 @@ class AppConfig:
     period: str = "1d"
     passive_mode_dur: int = DEFAULT_PASSIVE_MODE_SECONDS
     sources_path: Path = Path(__file__).with_name("sources.json")
+    update: bool = False
 
     @property
     def period_delta(self) -> timedelta:
@@ -79,6 +82,16 @@ def parse_period(period: str) -> timedelta:
     raise ValueError(f"Unsupported period unit '{unit}' in '{period}'")
 
 
+def parse_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False
+
+
 
 def load_app_config(config_path: Path | None = None) -> AppConfig:
     path = config_path
@@ -92,7 +105,7 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
             f"News aggregator configuration file not found at {path}"
         )
 
-    cfg_dict: Dict[str, str | int] = {}
+    cfg_dict: Dict[str, object] = {}
     if path and path.exists():
         logger.info("Loading application config from %s", path)
         cfg_dict = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -128,14 +141,18 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
     else:
         raise ValueError("Bad cache dir configuration!")
 
+    update_raw = os.environ.get(UPDATE_ENV_VAR, cfg_dict.get("update", False))
+    update = parse_bool(update_raw)
+
     logger.info(
-        "Loaded AppConfig(host=%s, port=%s, cache_dir=%s, period=%s, passive_mode_dur=%s, sources_path=%s)",
+        "Loaded AppConfig(host=%s, port=%s, cache_dir=%s, period=%s, passive_mode_dur=%s, sources_path=%s, update=%s)",
         host,
         port,
         cache_dir,
         period,
         passive,
         sources_path,
+        update,
     )
 
     return AppConfig(
@@ -145,5 +162,6 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
         period=period,
         passive_mode_dur=passive,
         sources_path=sources_path,
+        update=update,
     )
 

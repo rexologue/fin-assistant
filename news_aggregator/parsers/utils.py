@@ -93,7 +93,7 @@ def _download_image_as_base64(url: str) -> Optional[str]:
     return None
 
 
-def parse_rss_http_string(xml_text: bytes, source: str) -> List[NewsItem]:
+def parse_rss_http_string(xml_text: bytes, source: str, source_name: str) -> List[NewsItem]:
     logger.debug("Parsing RSS XML; length=%d bytes", len(xml_text))
     root = ET.fromstring(xml_text)
 
@@ -127,6 +127,7 @@ def parse_rss_http_string(xml_text: bytes, source: str) -> List[NewsItem]:
 
         news_item = NewsItem(
             source=source,
+            name=source_name,
             title=title,
             content=content,
             url=link,
